@@ -1,0 +1,27 @@
+{
+  "search_dirs": ["react/src"],
+  "exclude_patterns": [
+    "node_modules",
+    "*.test.ts",
+    "*.test.tsx",
+    "*.spec.ts",
+    "*.spec.tsx",
+    "*.stories.ts",
+    "*.stories.tsx",
+    "dist",
+    "build"
+  ],
+  "detection_types": {
+    "components": true,
+    "types": true,
+    "interfaces": true,
+    "functions": true,
+    "variables": true,
+    "enums": true
+  },
+  "ci": {
+    "max_unused_elements": 10,
+    "fail_on_exceed": true,
+    "log_level": "warn"
+  }
+}

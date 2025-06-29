@@ -1,0 +1,38 @@
+{
+  "name": "ts-unused-finder",
+  "version": "0.0.1",
+  "description": "A fast tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
+  "bin": {
+    "ts-unused-finder": "./bin/ts-unused-finder"
+  },
+  "scripts": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "fmt": "cargo fmt",
+    "prepare": "cargo build --release",
+    "postinstall": "npm run build"
+  },
+  "keywords": [
+    "react",
+    "unused",
+    "components",
+    "typescript",
+    "analyzer",
+    "cli"
+  ],
+  "author": "myzkey",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/ts-unused-finder.git"
+  },
+  "files": [
+    "bin",
+    "src",
+    "Cargo.toml",
+    "Cargo.lock"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
