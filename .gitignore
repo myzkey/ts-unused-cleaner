@@ -35,3 +35,6 @@ ts-unused-finder
 # Test artifacts
 /tests/temp/
 /example/temp/
+
+ts-unused-finder-*.tar.gz
+*.tgz
