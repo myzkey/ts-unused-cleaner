@@ -1,38 +1,66 @@
 {
   "name": "ts-unused-finder",
   "version": "0.0.1",
-  "description": "A fast tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
+  "description": "A blazingly fast Rust-based CLI tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
+  "main": "bin/ts-unused-finder",
   "bin": {
-    "ts-unused-finder": "./bin/ts-unused-finder"
+    "ts-unused-finder": "./bin/ts-unused-finder",
+    "tuf": "./bin/ts-unused-finder"
   },
   "scripts": {
-    "build": "cargo build --release",
+    "build": "cargo build --release && cp target/release/ts-unused-finder bin/",
     "test": "cargo test",
     "fmt": "cargo fmt",
-    "prepare": "cargo build --release",
-    "postinstall": "npm run build"
+    "prepare": "npm run build",
+    "postinstall": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
+    "typescript",
+    "javascript",
     "react",
     "unused",
+    "dead-code",
     "components",
-    "typescript",
     "analyzer",
-    "cli"
+    "cli",
+    "rust",
+    "performance",
+    "static-analysis",
+    "code-analysis",
+    "linter"
   ],
-  "author": "myzkey",
+  "author": {
+    "name": "myzkey",
+    "email": "myzkey.dev@gmail.com"
+  },
   "license": "MIT",
+  "homepage": "https://github.com/myzkey/ts-unused-finder#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/ts-unused-finder.git"
+    "url": "git+https://github.com/myzkey/ts-unused-finder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/myzkey/ts-unused-finder/issues"
   },
   "files": [
-    "bin",
-    "src",
+    "bin/",
+    "src/",
     "Cargo.toml",
-    "Cargo.lock"
+    "Cargo.lock",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=16.0.0"
-  }
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
 }

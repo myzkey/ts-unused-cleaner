@@ -1,0 +1,31 @@
+# Development files
+.git/
+.github/
+target/
+example/
+*.log
+
+# Test files
+tests/
+__tests__/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cargo development files
+Cargo.lock
+
+# Documentation drafts
+docs/
+
+# CI/CD files
+.circleci/
+.travis.yml
+azure-pipelines.yml
