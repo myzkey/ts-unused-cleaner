@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
 use colored::*;
-use ts_unused_finder::{detect_unused_elements, Reporter};
 use std::process;
+use ts_unused_finder::{detect_unused_elements, Reporter};
 
 #[derive(Parser)]
 #[command(
@@ -22,7 +22,6 @@ struct Cli {
     /// Path to configuration file
     #[arg(short, long)]
     config: Option<String>,
-
 
     /// Quiet output (errors only)
     #[arg(short, long)]
@@ -57,7 +56,6 @@ struct Cli {
     all: bool,
 }
 
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -75,7 +73,8 @@ fn main() -> Result<()> {
     // CLIオプションから設定を作成
     let custom_config =
         if cli.all || cli.types || cli.interfaces || cli.functions || cli.variables || cli.enums {
-            let mut config = ts_unused_finder::load_config(cli.config.as_deref()).unwrap_or_default();
+            let mut config =
+                ts_unused_finder::load_config(cli.config.as_deref()).unwrap_or_default();
 
             if cli.all {
                 config.detection_types.components = true;

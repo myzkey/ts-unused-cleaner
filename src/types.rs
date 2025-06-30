@@ -206,7 +206,9 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.search_dirs, vec!["src"]);
         assert!(!config.exclude_patterns.is_empty());
-        assert!(config.exclude_patterns.contains(&"node_modules".to_string()));
+        assert!(config
+            .exclude_patterns
+            .contains(&"node_modules".to_string()));
         assert!(config.exclude_patterns.contains(&"*.test.ts".to_string()));
         assert!(config.detection_types.components);
         assert!(config.detection_types.types);

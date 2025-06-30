@@ -103,7 +103,6 @@ impl Reporter {
         }
     }
 
-
     /// プログレスバーを表示
     pub fn create_progress_bar(total: usize, message: &str) -> indicatif::ProgressBar {
         use indicatif::{ProgressBar, ProgressStyle};
@@ -137,9 +136,8 @@ impl Reporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ElementInfo, DetectionResult};
+    use crate::types::{DetectionResult, ElementInfo};
     use std::collections::HashMap;
-
 
     #[test]
     fn test_usage_rate_calculation() {

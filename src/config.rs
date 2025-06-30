@@ -32,7 +32,7 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config, DetectorError> {
 /// 標準的な設定ファイルを探す
 fn find_config_file() -> Option<String> {
     let config_file = "tuf.config.json";
-    
+
     if Path::new(config_file).exists() {
         Some(config_file.to_string())
     } else {
@@ -113,14 +113,16 @@ mod tests {
         let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
         assert_eq!(config.search_dirs, vec!["custom/src"]);
         // デフォルトのexclude_patternsが使用される
-        assert!(config.exclude_patterns.contains(&"node_modules".to_string()));
+        assert!(config
+            .exclude_patterns
+            .contains(&"node_modules".to_string()));
     }
 
     #[test]
     fn test_monorepo_adjustment() {
         let mut config = Config::default();
         config.search_dirs = vec!["src".to_string()];
-        
+
         // モノレポでない場合はそのまま
         let adjusted = adjust_config_for_monorepo(config.clone()).unwrap();
         assert_eq!(adjusted.search_dirs, vec!["src"]);

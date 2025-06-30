@@ -1,6 +1,6 @@
 use crate::types::{
-    ElementInfo, ElementMap, ElementUsage, Config, DetectionResult, DetectionStats,
-    DetectorError, ElementType, Usage,
+    Config, DetectionResult, DetectionStats, DetectorError, ElementInfo, ElementMap, ElementType,
+    ElementUsage, Usage,
 };
 use rayon::prelude::*;
 use regex::Regex;
@@ -388,6 +388,18 @@ impl UnusedElementDetector {
             for pattern in patterns {
                 for mat in pattern.find_iter(content) {
                     let line_number = content[..mat.start()].lines().count();
+                    let line_content = content.lines().nth(line_number - 1).unwrap_or("");
+                    
+                    // 定義行（export const ELEMENT_NAME = や const ELEMENT_NAME = ）をスキップ
+                    if line_content.trim_start().starts_with("export const") 
+                        && line_content.contains(&format!("{} =", element_name)) {
+                        continue;
+                    }
+                    if line_content.trim_start().starts_with("const") 
+                        && line_content.contains(&format!("{} =", element_name)) {
+                        continue;
+                    }
+                    
                     usages.push(Usage {
                         line: line_number,
                         context: mat.as_str().to_string(),
@@ -453,18 +465,24 @@ mod tests {
         export type MyType = string;
         export interface MyInterface {}
         export const CONSTANT = "value";
+        export const API_URLS = [
+            'https://api.example.com/users',
+            'https://api.example.com/posts',
+            'https://api.example.com/comments'
+        ];
         export enum MyEnum { A, B }
         "#;
 
         let elements = detector.extract_elements_from_content(content);
         let names: Vec<String> = elements.iter().map(|(name, _)| name.clone()).collect();
-        
+
         assert!(names.contains(&"MyComponent".to_string()));
         assert!(names.contains(&"AnotherComponent".to_string()));
         assert!(names.contains(&"ThirdComponent".to_string()));
         assert!(names.contains(&"MyType".to_string()));
         assert!(names.contains(&"MyInterface".to_string()));
         assert!(names.contains(&"CONSTANT".to_string()));
+        assert!(names.contains(&"API_URLS".to_string()));
         assert!(names.contains(&"MyEnum".to_string()));
     }
 
@@ -478,8 +496,8 @@ mod tests {
             definitions: HashMap::new(),
         };
         component_map.definitions.insert(
-            "MyComponent".to_string(), 
-            (ElementType::Component, vec!["test.tsx".to_string()])
+            "MyComponent".to_string(),
+            (ElementType::Component, vec!["test.tsx".to_string()]),
         );
         detector.prepare_usage_patterns(&component_map).unwrap();
 
@@ -490,6 +508,35 @@ mod tests {
 
         let usages = detector.find_element_usage_in_content(content, "MyComponent");
         assert!(!usages.is_empty());
+    }
+
+    #[test]
+    fn test_find_array_constant_usage() {
+        let config = Config::default();
+        let mut detector = UnusedElementDetector::new(config).unwrap();
+
+        // 配列定数の使用パターンを準備
+        let mut element_map = ElementMap {
+            definitions: HashMap::new(),
+        };
+        element_map.definitions.insert(
+            "API_URLS".to_string(),
+            (ElementType::Variable, vec!["constants.ts".to_string()]),
+        );
+        detector.prepare_usage_patterns(&element_map).unwrap();
+
+        // 配列定数の使用例
+        let content = r#"
+        import { API_URLS } from './constants';
+        const urls = API_URLS.map(url => url);
+        for (const url of API_URLS) {
+            console.log(url);
+        }
+        "#;
+
+        let usages = detector.find_element_usage_in_content(content, "API_URLS");
+        assert!(!usages.is_empty(), "API_URLS should be detected as used");
+        assert!(usages.len() >= 2, "API_URLS should be found multiple times");
     }
 
     #[test]
