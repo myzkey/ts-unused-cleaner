@@ -8,7 +8,7 @@ use ts_unused_finder::{detect_unused_elements, Reporter};
 #[command(
     name = "ts-unused-finder",
     about = "A fast tool to find unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
-    version = "1.0.0"
+    version = "0.0.7"
 )]
 struct Cli {
     /// Show verbose output
@@ -178,7 +178,7 @@ mod tests {
         cmd.arg("--version");
         cmd.assert()
             .success()
-            .stdout(predicate::str::contains("1.0.0"));
+            .stdout(predicate::str::contains("0.0.7"));
     }
 
     #[test]

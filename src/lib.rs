@@ -26,7 +26,7 @@ pub fn detect_unused_elements(
     // モノレポ対応
     config = adjust_config_for_monorepo(config)?;
 
-    // 検出実行
+    // AST検出実行
     let mut detector = UnusedElementDetector::new(config)?;
     let result = detector.detect()?;
 

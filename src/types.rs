@@ -184,11 +184,11 @@ pub enum DetectorError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Regex error: {0}")]
-    Regex(#[from] regex::Error),
-
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
 
     #[error("Config error: {message}")]
     Config { message: String },

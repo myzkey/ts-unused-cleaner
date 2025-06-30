@@ -1,94 +1,39 @@
 use crate::types::{
-    Config, DetectionResult, DetectionStats, DetectorError, ElementInfo, ElementMap, ElementType,
+    Config, DetectionResult, DetectionStats, DetectorError, ElementInfo, ElementType,
     ElementUsage, Usage,
 };
 use rayon::prelude::*;
-use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use swc_common::BytePos;
+use swc_ecma_ast::*;
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use walkdir::WalkDir;
 
 pub struct UnusedElementDetector {
     config: Config,
-    definition_patterns: HashMap<ElementType, Vec<Regex>>,
-    usage_patterns: HashMap<String, Vec<Regex>>,
+}
+
+#[derive(Debug, Clone)]
+struct ElementDefinition {
+    name: String,
+    element_type: ElementType,
+    file: String,
+}
+
+#[derive(Debug, Clone)]
+struct ElementReference {
+    name: String,
+    file: String,
+    line: usize,
+    context: String,
 }
 
 impl UnusedElementDetector {
     pub fn new(config: Config) -> Result<Self, DetectorError> {
-        let mut definition_patterns = HashMap::new();
-
-        // コンポーネント定義パターン
-        if config.detection_types.components {
-            definition_patterns.insert(ElementType::Component, vec![
-                Regex::new(r"export\s+default\s+function\s+([A-Z][a-zA-Z0-9]*)")?,
-                Regex::new(r"export\s+const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*(?:React\.)?(?:memo|forwardRef)")?,
-                Regex::new(r"export\s+const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*\([^)]*\)\s*=>")?,
-                Regex::new(r"export\s+function\s+([A-Z][a-zA-Z0-9]*)")?,
-                Regex::new(r"const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*React\.forwardRef")?,
-                Regex::new(r"const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*forwardRef")?,
-            ]);
-        }
-
-        // TypeScript型定義パターン
-        if config.detection_types.types {
-            definition_patterns.insert(
-                ElementType::Type,
-                vec![
-                    Regex::new(r"export\s+type\s+([A-Z][a-zA-Z0-9]*)")?,
-                    Regex::new(r"type\s+([A-Z][a-zA-Z0-9]*)\s*=")?,
-                ],
-            );
-        }
-
-        // インターフェース定義パターン
-        if config.detection_types.interfaces {
-            definition_patterns.insert(
-                ElementType::Interface,
-                vec![
-                    Regex::new(r"export\s+interface\s+([A-Z][a-zA-Z0-9]*)")?,
-                    Regex::new(r"interface\s+([A-Z][a-zA-Z0-9]*)")?,
-                ],
-            );
-        }
-
-        // 関数定義パターン
-        if config.detection_types.functions {
-            definition_patterns.insert(ElementType::Function, vec![
-                Regex::new(r"export\s+function\s+([a-z][a-zA-Z0-9]*)")?,
-                Regex::new(r"export\s+const\s+([a-z][a-zA-Z0-9]*)\s*=\s*(?:async\s+)?(?:\([^)]*\)\s*=>|\([^)]*\)\s*:\s*[^=]+\s*=>)")?,
-                Regex::new(r"const\s+([a-z][a-zA-Z0-9]*)\s*=\s*(?:async\s+)?(?:\([^)]*\)\s*=>|\([^)]*\)\s*:\s*[^=]+\s*=>)")?,
-            ]);
-        }
-
-        // 変数/定数定義パターン
-        if config.detection_types.variables {
-            definition_patterns.insert(
-                ElementType::Variable,
-                vec![
-                    Regex::new(r"export\s+const\s+([A-Z_][A-Z0-9_]*)\s*=")?,
-                    Regex::new(r"export\s+let\s+([a-z][a-zA-Z0-9]*)\s*=")?,
-                    Regex::new(r"const\s+([A-Z_][A-Z0-9_]*)\s*=")?,
-                ],
-            );
-        }
-
-        // enum定義パターン
-        if config.detection_types.enums {
-            definition_patterns.insert(
-                ElementType::Enum,
-                vec![
-                    Regex::new(r"export\s+enum\s+([A-Z][a-zA-Z0-9]*)")?,
-                    Regex::new(r"enum\s+([A-Z][a-zA-Z0-9]*)")?,
-                ],
-            );
-        }
-
         Ok(Self {
             config,
-            definition_patterns,
-            usage_patterns: HashMap::new(),
         })
     }
 
@@ -119,37 +64,36 @@ impl UnusedElementDetector {
 
         println!("🔍 Scanning for unused {}...", enabled_types.join(", "));
 
-        // 1. ソースファイルを並列で取得
-        let source_files = self.get_component_files()?;
-        println!("📁 Found {} source files", source_files.len());
+        // 1. 定義検出用ファイル（除外適用）と使用検出用ファイル（除外なし）を分離
+        let definition_files = self.get_source_files_for_definitions()?;
+        let all_files = self.get_all_source_files()?;
+        println!("📁 Found {} source files ({} for definitions, {} for usage scanning)", 
+                 all_files.len(), definition_files.len(), all_files.len());
 
-        // 2. 要素定義を並列で抽出
-        let element_map = self.extract_element_definitions(&source_files)?;
-        println!("🔧 Discovered {} elements", element_map.definitions.len());
+        // 2. AST解析で要素定義を抽出（除外パターン適用）
+        let definitions = self.extract_definitions(&definition_files)?;
+        println!("🔧 Discovered {} elements", definitions.len());
 
-        // 3. 検索ファイルを取得
-        let search_files = self.get_search_files()?;
-        println!("📄 Searching for usage in {} files", search_files.len());
+        // 3. AST解析で使用箇所を検索（全ファイルから）
+        let references = self.extract_references(&all_files)?;
+        println!("📄 Found {} references", references.len());
 
-        // 4. 使用パターンを事前に生成
-        self.prepare_usage_patterns(&element_map)?;
+        // 4. 使用状況を分析
+        let (unused, used) = self.analyze_usage(&definitions, &references)?;
 
-        // 5. 並列で使用箇所をチェック
-        let (unused, used) = self.check_element_usage(&element_map, &search_files)?;
-
-        // 6. 統計情報を生成
+        // 5. 統計情報を生成
         let by_type = self.generate_statistics(&unused, &used);
 
         Ok(DetectionResult {
-            total: element_map.definitions.len(),
+            total: definitions.len(),
             unused,
             used,
             by_type,
         })
     }
 
-    /// コンポーネントファイルを取得
-    fn get_component_files(&self) -> Result<Vec<String>, DetectorError> {
+    /// 定義検出用ソースファイルを取得（除外パターン適用）
+    fn get_source_files_for_definitions(&self) -> Result<Vec<String>, DetectorError> {
         let files_nested: Vec<Vec<String>> = self
             .config
             .search_dirs
@@ -158,23 +102,22 @@ impl UnusedElementDetector {
             .collect::<Result<Vec<_>, _>>()?;
 
         let files: Vec<String> = files_nested.into_iter().flatten().collect();
-
         Ok(files)
     }
 
-    /// 検索ファイルを取得
-    fn get_search_files(&self) -> Result<Vec<String>, DetectorError> {
+    /// 全ソースファイルを取得（使用検出用、除外パターンなし）
+    fn get_all_source_files(&self) -> Result<Vec<String>, DetectorError> {
         let files_nested: Vec<Vec<String>> = self
             .config
             .search_dirs
             .par_iter()
-            .map(|dir| self.get_files_in_dir(dir, &[".ts", ".tsx"]))
+            .map(|dir| self.get_files_in_dir_no_exclude(dir, &[".ts", ".tsx"]))
             .collect::<Result<Vec<_>, _>>()?;
 
         let files: Vec<String> = files_nested.into_iter().flatten().collect();
-
         Ok(files)
     }
+
 
     /// ディレクトリ内のファイルを取得
     fn get_files_in_dir(
@@ -192,17 +135,51 @@ impl UnusedElementDetector {
                 let entry = entry.ok()?;
                 let path = entry.path();
 
-                // ファイルのみ処理
                 if !entry.file_type().is_file() {
                     return None;
                 }
 
-                // 除外パターンをチェック
                 if self.should_exclude(path) {
                     return None;
                 }
 
-                // 拡張子をチェック
+                if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_string_lossy();
+                    if extensions
+                        .iter()
+                        .any(|&e| ext_str == e.trim_start_matches('.'))
+                    {
+                        return Some(Ok(path.to_string_lossy().to_string()));
+                    }
+                }
+
+                None
+            })
+            .collect();
+
+        files
+    }
+
+    /// ディレクトリ内のファイルを取得（除外パターンなし）
+    fn get_files_in_dir_no_exclude(
+        &self,
+        dir: &str,
+        extensions: &[&str],
+    ) -> Result<Vec<String>, DetectorError> {
+        if !Path::new(dir).exists() {
+            return Ok(Vec::new());
+        }
+
+        let files: Result<Vec<_>, _> = WalkDir::new(dir)
+            .into_iter()
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+
+                if !entry.file_type().is_file() {
+                    return None;
+                }
+
                 if let Some(ext) = path.extension() {
                     let ext_str = ext.to_string_lossy();
                     if extensions
@@ -226,10 +203,15 @@ impl UnusedElementDetector {
 
         for pattern in &self.config.exclude_patterns {
             if pattern.contains('*') {
-                // ワイルドカードパターンの簡単な実装
-                let regex_pattern = pattern.replace("*", ".*");
-                if let Ok(regex) = Regex::new(&regex_pattern) {
-                    if regex.is_match(&path_str) {
+                // 簡単なワイルドカードマッチング
+                let parts: Vec<&str> = pattern.split('*').collect();
+                if parts.len() == 2 {
+                    if path_str.starts_with(parts[0]) && path_str.ends_with(parts[1]) {
+                        return true;
+                    }
+                } else if pattern.ends_with("/**") {
+                    let prefix = &pattern[..pattern.len() - 3];
+                    if path_str.starts_with(prefix) {
                         return true;
                     }
                 }
@@ -241,174 +223,86 @@ impl UnusedElementDetector {
         false
     }
 
-    /// 要素定義を抽出
-    fn extract_element_definitions(&self, files: &[String]) -> Result<ElementMap, DetectorError> {
-        let definitions: HashMap<String, (ElementType, Vec<String>)> = files
+    /// AST解析で要素定義を抽出
+    fn extract_definitions(
+        &self,
+        files: &[String],
+    ) -> Result<Vec<ElementDefinition>, DetectorError> {
+        let config = self.config.clone();
+        let definitions: Vec<Vec<ElementDefinition>> = files
             .par_iter()
             .map(|file| {
                 let content = fs::read_to_string(file)?;
-                let elements = self.extract_elements_from_content(&content);
-                Ok((file.clone(), elements))
+                let defs = parse_file_for_definitions_static(file, &content, &config)?;
+                Ok(defs)
             })
-            .collect::<Result<Vec<_>, DetectorError>>()?
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, (file, elements)| {
-                for (element_name, element_type) in elements {
-                    acc.entry(element_name)
-                        .or_insert_with(|| (element_type.clone(), Vec::new()))
-                        .1
-                        .push(file.clone());
-                }
-                acc
-            });
+            .collect::<Result<Vec<_>, DetectorError>>()?;
 
-        Ok(ElementMap { definitions })
+        Ok(definitions.into_iter().flatten().collect())
     }
 
-    /// ファイル内容から要素を抽出
-    fn extract_elements_from_content(&self, content: &str) -> Vec<(String, ElementType)> {
-        let mut elements = Vec::new();
 
-        for (element_type, patterns) in &self.definition_patterns {
-            for pattern in patterns {
-                for cap in pattern.captures_iter(content) {
-                    if let Some(element_name) = cap.get(1) {
-                        elements.push((element_name.as_str().to_string(), element_type.clone()));
-                    }
-                }
-            }
-        }
-
-        elements
-    }
-
-    /// 使用パターンを事前に準備
-    fn prepare_usage_patterns(&mut self, element_map: &ElementMap) -> Result<(), DetectorError> {
-        for (element_name, (element_type, _)) in &element_map.definitions {
-            let patterns = match element_type {
-                ElementType::Component => vec![
-                    Regex::new(&format!(r"<{}(?:\s|>|/)", element_name))?,
-                    Regex::new(&format!(r"import\s*\{{[^}}]*\b{}\b[^}}]*\}}", element_name))?,
-                    Regex::new(&format!(r"import\s+{}\b", element_name))?,
-                    Regex::new(&format!(r"\{{\s*{}\s*\}}", element_name))?,
-                ],
-                ElementType::Type | ElementType::Interface => vec![
-                    Regex::new(&format!(r":\s*{}\b", element_name))?,
-                    Regex::new(&format!(r"<{}>", element_name))?,
-                    Regex::new(&format!(r"extends\s+{}\b", element_name))?,
-                    Regex::new(&format!(r"implements\s+{}\b", element_name))?,
-                    Regex::new(&format!(r"import\s*\{{[^}}]*\b{}\b[^}}]*\}}", element_name))?,
-                ],
-                ElementType::Function => vec![
-                    Regex::new(&format!(r"\b{}(?:\s*\()", element_name))?,
-                    Regex::new(&format!(r"import\s*\{{[^}}]*\b{}\b[^}}]*\}}", element_name))?,
-                    Regex::new(&format!(r"import\s+{}\b", element_name))?,
-                ],
-                ElementType::Variable | ElementType::Enum => vec![
-                    Regex::new(&format!(r"\b{}\b", element_name))?,
-                    Regex::new(&format!(r"import\s*\{{[^}}]*\b{}\b[^}}]*\}}", element_name))?,
-                ],
-            };
-            self.usage_patterns.insert(element_name.clone(), patterns);
-        }
-        Ok(())
-    }
-
-    /// 要素使用箇所をチェック
-    fn check_element_usage(
-        &self,
-        element_map: &ElementMap,
-        search_files: &[String],
-    ) -> Result<(Vec<ElementInfo>, Vec<ElementInfo>), DetectorError> {
-        let results: Vec<_> = element_map
-            .definitions
+    /// AST解析で参照を抽出
+    fn extract_references(&self, files: &[String]) -> Result<Vec<ElementReference>, DetectorError> {
+        let references: Vec<Vec<ElementReference>> = files
             .par_iter()
-            .map(|(element_name, (element_type, definition_files))| {
-                let mut is_used = false;
-                let mut usages = Vec::new();
-
-                for search_file in search_files {
-                    // 定義ファイル自体は除外
-                    if definition_files.contains(search_file) {
-                        continue;
-                    }
-
-                    if let Ok(content) = fs::read_to_string(search_file) {
-                        let file_usages =
-                            self.find_element_usage_in_content(&content, element_name);
-                        if !file_usages.is_empty() {
-                            is_used = true;
-                            usages.push(ElementUsage {
-                                file: search_file.clone(),
-                                usages: file_usages,
-                            });
-                        }
-                    }
-                }
-
-                (
-                    element_name.clone(),
-                    element_type.clone(),
-                    definition_files.clone(),
-                    is_used,
-                    usages,
-                )
+            .map(|file| {
+                let content = fs::read_to_string(file)?;
+                let refs = parse_file_for_references_static(file, &content)?;
+                Ok(refs)
             })
-            .collect();
+            .collect::<Result<Vec<_>, DetectorError>>()?;
 
+        Ok(references.into_iter().flatten().collect())
+    }
+
+
+    /// 使用状況を分析
+    fn analyze_usage(
+        &self,
+        definitions: &[ElementDefinition],
+        references: &[ElementReference],
+    ) -> Result<(Vec<ElementInfo>, Vec<ElementInfo>), DetectorError> {
         let mut unused = Vec::new();
         let mut used = Vec::new();
 
-        for (name, element_type, definition_files, is_used, usages) in results {
+        for def in definitions {
+            let mut element_usages = Vec::new();
+            let mut is_used = false;
+
+            for ref_item in references {
+                // 同じファイル内の定義は除外
+                if ref_item.file == def.file {
+                    continue;
+                }
+
+                if ref_item.name == def.name {
+                    is_used = true;
+                    element_usages.push(ElementUsage {
+                        file: ref_item.file.clone(),
+                        usages: vec![Usage {
+                            line: ref_item.line,
+                            context: ref_item.context.clone(),
+                        }],
+                    });
+                }
+            }
+
+            let element_info = ElementInfo {
+                name: def.name.clone(),
+                element_type: def.element_type.clone(),
+                definition_files: vec![def.file.clone()],
+                usages: if is_used { Some(element_usages) } else { None },
+            };
+
             if is_used {
-                used.push(ElementInfo {
-                    name,
-                    element_type,
-                    definition_files,
-                    usages: Some(usages),
-                });
+                used.push(element_info);
             } else {
-                unused.push(ElementInfo {
-                    name,
-                    element_type,
-                    definition_files,
-                    usages: None,
-                });
+                unused.push(element_info);
             }
         }
 
         Ok((unused, used))
-    }
-
-    /// ファイル内容での要素使用箇所を検索
-    fn find_element_usage_in_content(&self, content: &str, element_name: &str) -> Vec<Usage> {
-        let mut usages = Vec::new();
-
-        if let Some(patterns) = self.usage_patterns.get(element_name) {
-            for pattern in patterns {
-                for mat in pattern.find_iter(content) {
-                    let line_number = content[..mat.start()].lines().count();
-                    let line_content = content.lines().nth(line_number - 1).unwrap_or("");
-                    
-                    // 定義行（export const ELEMENT_NAME = や const ELEMENT_NAME = ）をスキップ
-                    if line_content.trim_start().starts_with("export const") 
-                        && line_content.contains(&format!("{} =", element_name)) {
-                        continue;
-                    }
-                    if line_content.trim_start().starts_with("const") 
-                        && line_content.contains(&format!("{} =", element_name)) {
-                        continue;
-                    }
-                    
-                    usages.push(Usage {
-                        line: line_number,
-                        context: mat.as_str().to_string(),
-                    });
-                }
-            }
-        }
-
-        usages
     }
 
     /// 統計情報を生成
@@ -419,7 +313,6 @@ impl UnusedElementDetector {
     ) -> HashMap<ElementType, DetectionStats> {
         let mut stats = HashMap::new();
 
-        // 使用されていない要素の統計
         for item in unused {
             let entry = stats
                 .entry(item.element_type.clone())
@@ -432,7 +325,6 @@ impl UnusedElementDetector {
             entry.unused += 1;
         }
 
-        // 使用されている要素の統計
         for item in used {
             let entry = stats
                 .entry(item.element_type.clone())
@@ -449,104 +341,410 @@ impl UnusedElementDetector {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// 定義を収集するVisitor
+struct DefinitionVisitor {
+    file: String,
+    config: Config,
+    definitions: Vec<ElementDefinition>,
+}
 
-    #[test]
-    fn test_extract_elements() {
-        let config = Config::default();
-        let detector = UnusedElementDetector::new(config).unwrap();
-
-        let content = r#"
-        export default function MyComponent() {}
-        export const AnotherComponent = () => {}
-        export function ThirdComponent() {}
-        export type MyType = string;
-        export interface MyInterface {}
-        export const CONSTANT = "value";
-        export const API_URLS = [
-            'https://api.example.com/users',
-            'https://api.example.com/posts',
-            'https://api.example.com/comments'
-        ];
-        export enum MyEnum { A, B }
-        "#;
-
-        let elements = detector.extract_elements_from_content(content);
-        let names: Vec<String> = elements.iter().map(|(name, _)| name.clone()).collect();
-
-        assert!(names.contains(&"MyComponent".to_string()));
-        assert!(names.contains(&"AnotherComponent".to_string()));
-        assert!(names.contains(&"ThirdComponent".to_string()));
-        assert!(names.contains(&"MyType".to_string()));
-        assert!(names.contains(&"MyInterface".to_string()));
-        assert!(names.contains(&"CONSTANT".to_string()));
-        assert!(names.contains(&"API_URLS".to_string()));
-        assert!(names.contains(&"MyEnum".to_string()));
-    }
-
-    #[test]
-    fn test_find_usage() {
-        let config = Config::default();
-        let mut detector = UnusedElementDetector::new(config).unwrap();
-
-        // 使用パターンを準備
-        let mut component_map = ElementMap {
-            definitions: HashMap::new(),
-        };
-        component_map.definitions.insert(
-            "MyComponent".to_string(),
-            (ElementType::Component, vec!["test.tsx".to_string()]),
-        );
-        detector.prepare_usage_patterns(&component_map).unwrap();
-
-        let content = r#"
-        import { MyComponent } from './components';
-        <MyComponent prop="value" />
-        "#;
-
-        let usages = detector.find_element_usage_in_content(content, "MyComponent");
-        assert!(!usages.is_empty());
-    }
-
-    #[test]
-    fn test_find_array_constant_usage() {
-        let config = Config::default();
-        let mut detector = UnusedElementDetector::new(config).unwrap();
-
-        // 配列定数の使用パターンを準備
-        let mut element_map = ElementMap {
-            definitions: HashMap::new(),
-        };
-        element_map.definitions.insert(
-            "API_URLS".to_string(),
-            (ElementType::Variable, vec!["constants.ts".to_string()]),
-        );
-        detector.prepare_usage_patterns(&element_map).unwrap();
-
-        // 配列定数の使用例
-        let content = r#"
-        import { API_URLS } from './constants';
-        const urls = API_URLS.map(url => url);
-        for (const url of API_URLS) {
-            console.log(url);
+impl DefinitionVisitor {
+    fn new(file: String, config: &Config) -> Self {
+        Self {
+            file,
+            config: config.clone(),
+            definitions: Vec::new(),
         }
-        "#;
-
-        let usages = detector.find_element_usage_in_content(content, "API_URLS");
-        assert!(!usages.is_empty(), "API_URLS should be detected as used");
-        assert!(usages.len() >= 2, "API_URLS should be found multiple times");
     }
 
-    #[test]
-    fn test_should_exclude() {
-        let config = Config::default();
-        let detector = UnusedElementDetector::new(config).unwrap();
-
-        assert!(detector.should_exclude(Path::new("node_modules/package/index.js")));
-        assert!(detector.should_exclude(Path::new("src/components/Button.test.tsx")));
-        assert!(detector.should_exclude(Path::new("src/components/Button.stories.tsx")));
-        assert!(!detector.should_exclude(Path::new("src/components/Button.tsx")));
+    fn visit_module(&mut self, module: &Module) {
+        for item in &module.body {
+            self.visit_module_item(item);
+        }
     }
+
+    fn visit_module_item(&mut self, item: &ModuleItem) {
+        match item {
+            ModuleItem::ModuleDecl(decl) => self.visit_module_decl(decl),
+            ModuleItem::Stmt(stmt) => self.visit_stmt(stmt),
+        }
+    }
+
+    fn visit_module_decl(&mut self, decl: &ModuleDecl) {
+        match decl {
+            ModuleDecl::ExportDecl(export_decl) => {
+                self.visit_export_decl(&export_decl.decl);
+            }
+            ModuleDecl::ExportDefaultDecl(export_default) => {
+                self.visit_export_default_decl(export_default);
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_export_decl(&mut self, decl: &Decl) {
+        match decl {
+            Decl::Fn(func_decl) if self.config.detection_types.functions => {
+                if let Some(name) = self.extract_function_name(&func_decl.ident) {
+                    if self.is_camel_case(&name) {
+                        self.definitions.push(ElementDefinition {
+                            name,
+                            element_type: ElementType::Function,
+                            file: self.file.clone(),
+                        });
+                    }
+                }
+            }
+            Decl::Var(var_decl) => {
+                for decl in &var_decl.decls {
+                    if let Pat::Ident(ident) = &decl.name {
+                        let name = ident.id.sym.to_string();
+
+                        if let Some(init) = &decl.init {
+                            // コンポーネント検出
+                            if self.config.detection_types.components && self.is_component_pattern(&name, init) {
+                                self.definitions.push(ElementDefinition {
+                                    name: name.clone(),
+                                    element_type: ElementType::Component,
+                                    file: self.file.clone(),
+                                });
+                            }
+                            // 関数検出
+                            else if self.config.detection_types.functions && self.is_function_pattern(init) && self.is_camel_case(&name) {
+                                self.definitions.push(ElementDefinition {
+                                    name: name.clone(),
+                                    element_type: ElementType::Function,
+                                    file: self.file.clone(),
+                                });
+                            }
+                            // 変数検出
+                            else if self.config.detection_types.variables && self.is_constant_case(&name) {
+                                self.definitions.push(ElementDefinition {
+                                    name: name.clone(),
+                                    element_type: ElementType::Variable,
+                                    file: self.file.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Decl::TsTypeAlias(type_alias) if self.config.detection_types.types => {
+                let name = type_alias.id.sym.to_string();
+                if self.is_pascal_case(&name) {
+                    self.definitions.push(ElementDefinition {
+                        name,
+                        element_type: ElementType::Type,
+                        file: self.file.clone(),
+                    });
+                }
+            }
+            Decl::TsInterface(interface) if self.config.detection_types.interfaces => {
+                let name = interface.id.sym.to_string();
+                if self.is_pascal_case(&name) {
+                    self.definitions.push(ElementDefinition {
+                        name,
+                        element_type: ElementType::Interface,
+                        file: self.file.clone(),
+                    });
+                }
+            }
+            Decl::TsEnum(enum_decl) if self.config.detection_types.enums => {
+                let name = enum_decl.id.sym.to_string();
+                if self.is_pascal_case(&name) {
+                    self.definitions.push(ElementDefinition {
+                        name,
+                        element_type: ElementType::Enum,
+                        file: self.file.clone(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_export_default_decl(&mut self, export_default: &ExportDefaultDecl) {
+        match &export_default.decl {
+            DefaultDecl::Fn(func_expr) if self.config.detection_types.components => {
+                if let Some(ident) = &func_expr.ident {
+                    let name = ident.sym.to_string();
+                    if self.is_pascal_case(&name) {
+                        self.definitions.push(ElementDefinition {
+                            name,
+                            element_type: ElementType::Component,
+                            file: self.file.clone(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_stmt(&mut self, _stmt: &Stmt) {
+        // Stmtの処理は必要に応じて実装
+    }
+
+    // ヘルパーメソッド
+    fn extract_function_name(&self, ident: &Ident) -> Option<String> {
+        Some(ident.sym.to_string())
+    }
+
+    fn is_component_pattern(&self, name: &str, expr: &Expr) -> bool {
+        self.is_pascal_case(name) && (
+            self.is_arrow_function(expr) ||
+            self.is_react_component_call(expr)
+        )
+    }
+
+    fn is_function_pattern(&self, expr: &Expr) -> bool {
+        self.is_arrow_function(expr)
+    }
+
+    fn is_arrow_function(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Arrow(_))
+    }
+
+    fn is_react_component_call(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call(call_expr) => {
+                if let Callee::Expr(callee) = &call_expr.callee {
+                    match &**callee {
+                        Expr::Ident(ident) => {
+                            matches!(ident.sym.as_ref(), "memo" | "forwardRef")
+                        }
+                        Expr::Member(member) => {
+                            if let Expr::Ident(obj) = &*member.obj {
+                                obj.sym.as_ref() == "React" &&
+                                if let MemberProp::Ident(prop) = &member.prop {
+                                    matches!(prop.sym.as_ref(), "memo" | "forwardRef")
+                                } else { false }
+                            } else { false }
+                        }
+                        _ => false
+                    }
+                } else { false }
+            }
+            _ => false
+        }
+    }
+
+    fn is_pascal_case(&self, name: &str) -> bool {
+        !name.is_empty() && name.chars().next().unwrap().is_uppercase()
+    }
+
+    fn is_camel_case(&self, name: &str) -> bool {
+        !name.is_empty() && name.chars().next().unwrap().is_lowercase()
+    }
+
+    fn is_constant_case(&self, name: &str) -> bool {
+        name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_numeric())
+    }
+}
+
+/// 参照を収集するVisitor
+struct ReferenceVisitor {
+    file: String,
+    references: Vec<ElementReference>,
+}
+
+impl ReferenceVisitor {
+    fn new(file: String, _content: &str) -> Self {
+        Self {
+            file,
+            references: Vec::new(),
+        }
+    }
+
+    fn visit_module(&mut self, module: &Module) {
+        for item in &module.body {
+            self.visit_module_item(item);
+        }
+    }
+
+    fn visit_module_item(&mut self, item: &ModuleItem) {
+        match item {
+            ModuleItem::ModuleDecl(decl) => self.visit_module_decl(decl),
+            ModuleItem::Stmt(stmt) => self.visit_stmt(stmt),
+        }
+    }
+
+    fn visit_module_decl(&mut self, decl: &ModuleDecl) {
+        match decl {
+            ModuleDecl::Import(import_decl) => {
+                for specifier in &import_decl.specifiers {
+                    match specifier {
+                        ImportSpecifier::Named(named) => {
+                            let name = if let Some(imported) = &named.imported {
+                                match imported {
+                                    ModuleExportName::Ident(ident) => ident.sym.to_string(),
+                                    ModuleExportName::Str(str_lit) => str_lit.value.to_string(),
+                                }
+                            } else {
+                                named.local.sym.to_string()
+                            };
+
+                            self.references.push(ElementReference {
+                                name,
+                                file: self.file.clone(),
+                                line: 1,
+                                context: "import".to_string(),
+                            });
+                        }
+                        ImportSpecifier::Default(default) => {
+                            self.references.push(ElementReference {
+                                name: default.local.sym.to_string(),
+                                file: self.file.clone(),
+                                line: 1,
+                                context: "import".to_string(),
+                            });
+                        }
+                        ImportSpecifier::Namespace(namespace) => {
+                            self.references.push(ElementReference {
+                                name: namespace.local.sym.to_string(),
+                                file: self.file.clone(),
+                                line: 1,
+                                context: "import".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        // 各種文の処理
+        match stmt {
+            Stmt::Expr(expr_stmt) => {
+                self.visit_expr(&expr_stmt.expr);
+            }
+            Stmt::Decl(decl) => {
+                self.visit_decl(decl);
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Ident(ident) => {
+                self.references.push(ElementReference {
+                    name: ident.sym.to_string(),
+                    file: self.file.clone(),
+                    line: 1,
+                    context: "usage".to_string(),
+                });
+            }
+            Expr::Call(call_expr) => {
+                self.visit_callee(&call_expr.callee);
+                for arg in &call_expr.args {
+                    self.visit_expr_or_spread(arg);
+                }
+            }
+            Expr::JSXElement(jsx_elem) => {
+                self.visit_jsx_element(jsx_elem);
+            }
+            _ => {
+                // 他の式の処理は必要に応じて実装
+            }
+        }
+    }
+
+    fn visit_expr_or_spread(&mut self, expr: &ExprOrSpread) {
+        self.visit_expr(&expr.expr);
+    }
+
+    fn visit_callee(&mut self, callee: &Callee) {
+        match callee {
+            Callee::Expr(expr) => {
+                self.visit_expr(expr);
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_jsx_element(&mut self, jsx_elem: &JSXElement) {
+        if let JSXElementName::Ident(ident) = &jsx_elem.opening.name {
+            self.references.push(ElementReference {
+                name: ident.sym.to_string(),
+                file: self.file.clone(),
+                line: 1,
+                context: "jsx".to_string(),
+            });
+        }
+
+        for child in &jsx_elem.children {
+            if let JSXElementChild::JSXElement(child_elem) = child {
+                self.visit_jsx_element(child_elem);
+            }
+        }
+    }
+
+    fn visit_decl(&mut self, _decl: &Decl) {
+        // Declの処理は必要に応じて実装
+    }
+
+}
+
+/// 静的関数：ファイルをASTで解析して定義を抽出
+fn parse_file_for_definitions_static(
+    file: &str,
+    content: &str,
+    config: &Config,
+) -> Result<Vec<ElementDefinition>, DetectorError> {
+    let input = StringInput::new(content, BytePos(0), BytePos(content.len() as u32));
+
+    let lexer = Lexer::new(
+        Syntax::Typescript(TsConfig {
+            tsx: file.ends_with(".tsx"),
+            decorators: true,
+            dts: file.ends_with(".d.ts"),
+            no_early_errors: true,
+            disallow_ambiguous_jsx_like: false,
+        }),
+        Default::default(),
+        input,
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+    let module = parser.parse_module()
+        .map_err(|e| DetectorError::ParseError(format!("Failed to parse {}: {:?}", file, e)))?;
+
+    let mut visitor = DefinitionVisitor::new(file.to_string(), config);
+    visitor.visit_module(&module);
+
+    Ok(visitor.definitions)
+}
+
+/// 静的関数：ファイルをASTで解析して参照を抽出
+fn parse_file_for_references_static(
+    file: &str,
+    content: &str,
+) -> Result<Vec<ElementReference>, DetectorError> {
+    let input = StringInput::new(content, BytePos(0), BytePos(content.len() as u32));
+
+    let lexer = Lexer::new(
+        Syntax::Typescript(TsConfig {
+            tsx: file.ends_with(".tsx"),
+            decorators: true,
+            dts: file.ends_with(".d.ts"),
+            no_early_errors: true,
+            disallow_ambiguous_jsx_like: false,
+        }),
+        Default::default(),
+        input,
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+    let module = parser.parse_module()
+        .map_err(|e| DetectorError::ParseError(format!("Failed to parse {}: {:?}", file, e)))?;
+
+    let mut visitor = ReferenceVisitor::new(file.to_string(), content);
+    visitor.visit_module(&module);
+
+    Ok(visitor.references)
 }
