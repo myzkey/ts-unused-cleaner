@@ -1,6 +1,6 @@
 [package]
 name = "ts-unused-cleaner"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2021"
 authors = ["myzkey"]
 description = "A fast Rust-based tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums"

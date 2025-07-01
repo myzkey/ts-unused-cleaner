@@ -1,6 +1,6 @@
 {
   "name": "ts-unused-cleaner",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "A blazingly fast Rust-based CLI tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
   "main": "bin/ts-unused-cleaner",
   "bin": {

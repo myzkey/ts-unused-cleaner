@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use swc_common::BytePos;
+use swc_common::{BytePos, Span, Spanned};
 use swc_ecma_ast::*;
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use walkdir::WalkDir;
@@ -20,6 +20,8 @@ struct ElementDefinition {
     name: String,
     element_type: ElementType,
     file: String,
+    span: Span,
+    should_ignore: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +269,11 @@ impl UnusedElementDetector {
         let mut used = Vec::new();
 
         for def in definitions {
+            // Skip if element has ignore comment
+            if def.should_ignore {
+                continue;
+            }
+
             let mut element_usages = Vec::new();
             let mut is_used = false;
 
@@ -346,14 +353,16 @@ struct DefinitionVisitor {
     file: String,
     config: Config,
     definitions: Vec<ElementDefinition>,
+    content: String,
 }
 
 impl DefinitionVisitor {
-    fn new(file: String, config: &Config) -> Self {
+    fn new(file: String, config: &Config, content: String) -> Self {
         Self {
             file,
             config: config.clone(),
             definitions: Vec::new(),
+            content,
         }
     }
 
@@ -387,10 +396,13 @@ impl DefinitionVisitor {
             Decl::Fn(func_decl) if self.config.detection_types.functions => {
                 if let Some(name) = self.extract_function_name(&func_decl.ident) {
                     if self.is_camel_case(&name) {
+                        let should_ignore = self.has_ignore_comment(func_decl.span());
                         self.definitions.push(ElementDefinition {
                             name,
                             element_type: ElementType::Function,
                             file: self.file.clone(),
+                            span: func_decl.span(),
+                            should_ignore,
                         });
                     }
                 }
@@ -401,12 +413,15 @@ impl DefinitionVisitor {
                         let name = ident.id.sym.to_string();
 
                         if let Some(init) = &decl.init {
+                            let should_ignore = self.has_ignore_comment(decl.span);
                             // コンポーネント検出
                             if self.config.detection_types.components && self.is_component_pattern(&name, init) {
                                 self.definitions.push(ElementDefinition {
                                     name: name.clone(),
                                     element_type: ElementType::Component,
                                     file: self.file.clone(),
+                                    span: decl.span,
+                                    should_ignore,
                                 });
                             }
                             // 関数検出
@@ -415,6 +430,8 @@ impl DefinitionVisitor {
                                     name: name.clone(),
                                     element_type: ElementType::Function,
                                     file: self.file.clone(),
+                                    span: decl.span,
+                                    should_ignore,
                                 });
                             }
                             // 変数検出
@@ -423,6 +440,8 @@ impl DefinitionVisitor {
                                     name: name.clone(),
                                     element_type: ElementType::Variable,
                                     file: self.file.clone(),
+                                    span: decl.span,
+                                    should_ignore,
                                 });
                             }
                         }
@@ -432,30 +451,39 @@ impl DefinitionVisitor {
             Decl::TsTypeAlias(type_alias) if self.config.detection_types.types => {
                 let name = type_alias.id.sym.to_string();
                 if self.is_pascal_case(&name) {
+                    let should_ignore = self.has_ignore_comment(type_alias.span());
                     self.definitions.push(ElementDefinition {
                         name,
                         element_type: ElementType::Type,
                         file: self.file.clone(),
+                        span: type_alias.span(),
+                        should_ignore,
                     });
                 }
             }
             Decl::TsInterface(interface) if self.config.detection_types.interfaces => {
                 let name = interface.id.sym.to_string();
                 if self.is_pascal_case(&name) {
+                    let should_ignore = self.has_ignore_comment(interface.span());
                     self.definitions.push(ElementDefinition {
                         name,
                         element_type: ElementType::Interface,
                         file: self.file.clone(),
+                        span: interface.span(),
+                        should_ignore,
                     });
                 }
             }
             Decl::TsEnum(enum_decl) if self.config.detection_types.enums => {
                 let name = enum_decl.id.sym.to_string();
                 if self.is_pascal_case(&name) {
+                    let should_ignore = self.has_ignore_comment(enum_decl.span());
                     self.definitions.push(ElementDefinition {
                         name,
                         element_type: ElementType::Enum,
                         file: self.file.clone(),
+                        span: enum_decl.span(),
+                        should_ignore,
                     });
                 }
             }
@@ -469,10 +497,13 @@ impl DefinitionVisitor {
                 if let Some(ident) = &func_expr.ident {
                     let name = ident.sym.to_string();
                     if self.is_pascal_case(&name) {
+                        let should_ignore = self.has_ignore_comment(export_default.span());
                         self.definitions.push(ElementDefinition {
                             name,
                             element_type: ElementType::Component,
                             file: self.file.clone(),
+                            span: export_default.span(),
+                            should_ignore,
                         });
                     }
                 }
@@ -539,6 +570,41 @@ impl DefinitionVisitor {
 
     fn is_constant_case(&self, name: &str) -> bool {
         name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_numeric())
+    }
+
+    fn has_ignore_comment(&self, span: Span) -> bool {
+        // Get the line number of the element
+        let start_pos = span.lo.0 as usize;
+        let lines: Vec<&str> = self.content.lines().collect();
+        let mut char_count = 0;
+        let mut target_line = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            let line_length = line.len() + 1; // +1 for newline
+            if char_count + line_length > start_pos {
+                target_line = i;
+                break;
+            }
+            char_count += line_length;
+        }
+
+        // Check the previous line for ignore comment
+        if target_line > 0 {
+            let prev_line = lines[target_line - 1].trim();
+            if prev_line == "// @ts-unused-ignore" {
+                return true;
+            }
+        }
+
+        // Also check if there's an inline comment on the same line
+        if target_line < lines.len() {
+            let current_line = lines[target_line];
+            if current_line.contains("// @ts-unused-ignore") {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -713,7 +779,7 @@ fn parse_file_for_definitions_static(
     let module = parser.parse_module()
         .map_err(|e| DetectorError::ParseError(format!("Failed to parse {}: {:?}", file, e)))?;
 
-    let mut visitor = DefinitionVisitor::new(file.to_string(), config);
+    let mut visitor = DefinitionVisitor::new(file.to_string(), config, content.to_string());
     visitor.visit_module(&module);
 
     Ok(visitor.definitions)
@@ -747,4 +813,152 @@ fn parse_file_for_references_static(
     visitor.visit_module(&module);
 
     Ok(visitor.references)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::DetectionTypes;
+
+    fn create_test_config() -> Config {
+        Config {
+            detection_types: DetectionTypes {
+                components: true,
+                types: true,
+                interfaces: true,
+                functions: true,
+                variables: true,
+                enums: true,
+            },
+            search_dirs: vec![".".to_string()],
+            exclude_patterns: vec![],
+            ci: None,
+        }
+    }
+
+    #[test]
+    fn test_ignore_comment_detection() {
+        let config = create_test_config();
+        
+        // Test TypeScript type with ignore comment
+        let content = r#"// @ts-unused-ignore
+export type UnusedType = string;
+
+export type UsedType = number;
+"#;
+        let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
+        
+        // Find UnusedType and UsedType
+        let unused_type = result.iter().find(|def| def.name == "UnusedType").unwrap();
+        let used_type = result.iter().find(|def| def.name == "UsedType").unwrap();
+        
+        assert!(unused_type.should_ignore, "UnusedType should be marked for ignore");
+        assert!(!used_type.should_ignore, "UsedType should not be marked for ignore");
+    }
+
+    #[test]
+    fn test_ignore_comment_interface() {
+        let config = create_test_config();
+        
+        let content = r#"// @ts-unused-ignore
+export interface UnusedInterface {
+    prop: string;
+}
+
+export interface UsedInterface {
+    prop: number;
+}
+"#;
+        let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
+        
+        let unused_interface = result.iter().find(|def| def.name == "UnusedInterface").unwrap();
+        let used_interface = result.iter().find(|def| def.name == "UsedInterface").unwrap();
+        
+        assert!(unused_interface.should_ignore);
+        assert!(!used_interface.should_ignore);
+    }
+
+    #[test]
+    fn test_ignore_comment_function() {
+        let config = create_test_config();
+        
+        let content = r#"// @ts-unused-ignore
+export function unusedFunction() {
+    return "hello";
+}
+
+export function usedFunction() {
+    return "world";
+}
+"#;
+        let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
+        
+        let unused_function = result.iter().find(|def| def.name == "unusedFunction").unwrap();
+        let used_function = result.iter().find(|def| def.name == "usedFunction").unwrap();
+        
+        assert!(unused_function.should_ignore);
+        assert!(!used_function.should_ignore);
+    }
+
+    #[test]
+    fn test_ignore_comment_component() {
+        let config = create_test_config();
+        
+        let content = r#"// @ts-unused-ignore
+export const UnusedComponent = () => {
+    return <div>Unused</div>;
+};
+
+export const UsedComponent = () => {
+    return <div>Used</div>;
+};
+"#;
+        let result = parse_file_for_definitions_static("test.tsx", content, &config).unwrap();
+        
+        let unused_component = result.iter().find(|def| def.name == "UnusedComponent").unwrap();
+        let used_component = result.iter().find(|def| def.name == "UsedComponent").unwrap();
+        
+        assert!(unused_component.should_ignore);
+        assert!(!used_component.should_ignore);
+    }
+
+    #[test]
+    fn test_ignore_comment_enum() {
+        let config = create_test_config();
+        
+        let content = r#"// @ts-unused-ignore
+export enum UnusedEnum {
+    VALUE1 = "value1",
+    VALUE2 = "value2"
+}
+
+export enum UsedEnum {
+    VALUE3 = "value3",
+    VALUE4 = "value4"
+}
+"#;
+        let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
+        
+        let unused_enum = result.iter().find(|def| def.name == "UnusedEnum").unwrap();
+        let used_enum = result.iter().find(|def| def.name == "UsedEnum").unwrap();
+        
+        assert!(unused_enum.should_ignore);
+        assert!(!used_enum.should_ignore);
+    }
+
+    #[test]
+    fn test_inline_ignore_comment() {
+        let config = create_test_config();
+        
+        let content = r#"export type UnusedType = string; // @ts-unused-ignore
+export type UsedType = number;
+"#;
+        let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
+        
+        let unused_type = result.iter().find(|def| def.name == "UnusedType").unwrap();
+        let used_type = result.iter().find(|def| def.name == "UsedType").unwrap();
+        
+        assert!(unused_type.should_ignore, "UnusedType should be marked for ignore with inline comment");
+        assert!(!used_type.should_ignore, "UsedType should not be marked for ignore");
+    }
 }

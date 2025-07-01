@@ -1,4 +1,4 @@
-# TS Unused Cleaner
+# TypeScript Unused Cleaner
 
 [![Crates.io](https://img.shields.io/crates/v/ts-unused-cleaner)](https://crates.io/crates/ts-unused-cleaner)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
