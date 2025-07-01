@@ -2,11 +2,11 @@ use anyhow::Result;
 use clap::Parser;
 use colored::*;
 use std::process;
-use ts_unused_finder::{detect_unused_elements, Reporter};
+use ts_unused_cleaner::{detect_unused_elements, Reporter};
 
 #[derive(Parser)]
 #[command(
-    name = "ts-unused-finder",
+    name = "ts-unused-cleaner",
     about = "A fast tool to find unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
     version = "0.0.7"
 )]
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
     let custom_config =
         if cli.all || cli.types || cli.interfaces || cli.functions || cli.variables || cli.enums {
             let mut config =
-                ts_unused_finder::load_config(cli.config.as_deref()).unwrap_or_default();
+                ts_unused_cleaner::load_config(cli.config.as_deref()).unwrap_or_default();
 
             if cli.all {
                 config.detection_types.components = true;
@@ -154,8 +154,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn load_config_for_threshold_check(config_path: Option<&str>) -> Option<ts_unused_finder::Config> {
-    ts_unused_finder::load_config(config_path).ok()
+fn load_config_for_threshold_check(config_path: Option<&str>) -> Option<ts_unused_cleaner::Config> {
+    ts_unused_cleaner::load_config(config_path).ok()
 }
 
 #[cfg(test)]
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_help_command() {
-        let mut cmd = Command::cargo_bin("ts-unused-finder").unwrap();
+        let mut cmd = Command::cargo_bin("ts-unused-cleaner").unwrap();
         cmd.arg("--help");
         cmd.assert().success().stdout(predicate::str::contains(
             "A fast tool to find unused TypeScript/JavaScript code",
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_version_command() {
-        let mut cmd = Command::cargo_bin("ts-unused-finder").unwrap();
+        let mut cmd = Command::cargo_bin("ts-unused-cleaner").unwrap();
         cmd.arg("--version");
         cmd.assert()
             .success()
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_quiet_output() {
-        let mut cmd = Command::cargo_bin("ts-unused-finder").unwrap();
+        let mut cmd = Command::cargo_bin("ts-unused-cleaner").unwrap();
         cmd.args(&["--quiet"]);
         cmd.assert().success();
     }

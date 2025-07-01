@@ -1,6 +1,6 @@
-# TS Unused Finder Example Project
+# TS Unused Cleaner Example Project
 
-This example demonstrates how to use the TS Unused Finder tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums.
+This example demonstrates how to use the TS Unused Cleaner tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums.
 
 ## React Application
 
@@ -51,14 +51,14 @@ example/
 │   ├── vite.config.ts          # Vite configuration
 │   ├── tsconfig.json           # TypeScript configuration
 │   └── index.html              # HTML entry point
-├── tuf.config.json             # TS Unused Finder configuration
+├── tuc.config.json             # TS Unused Cleaner configuration
 ├── demo.sh                     # Demo script
 └── README.md                   # This file
 ```
 
 ## Expected Unused Elements
 
-The example includes intentionally unused elements to demonstrate TS Unused Finder's detection capabilities:
+The example includes intentionally unused elements to demonstrate TS Unused Cleaner's detection capabilities:
 
 ### Unused Components
 - `UnusedModal` - Modal component not imported anywhere
@@ -78,7 +78,7 @@ The example includes intentionally unused elements to demonstrate TS Unused Find
 
 ## Running the Demo
 
-1. **Build React Unused Finder** (from project root):
+1. **Build React Unused Cleaner** (from project root):
    ```bash
    cargo build --release
    ```
@@ -89,27 +89,27 @@ The example includes intentionally unused elements to demonstrate TS Unused Find
    ./demo.sh
    ```
 
-3. **Or run React Unused Finder manually**:
+3. **Or run React Unused Cleaner manually**:
    ```bash
    # Basic scan (components only)
-   ../target/release/ts-unused-finder
+   ../target/release/ts-unused-cleaner
    
    # Scan all element types
-   ../target/release/ts-unused-finder --all
+   ../target/release/ts-unused-cleaner --all
    
    # Verbose output with performance info
-   ../target/release/ts-unused-finder --all --verbose
+   ../target/release/ts-unused-cleaner --all --verbose
    
    # Using custom config file
-   ../target/release/ts-unused-finder --config tuf.config.json
+   ../target/release/ts-unused-cleaner --config tuc.config.json
    
    # Strict mode (exits with error if unused found)
-   ../target/release/ts-unused-finder --all --strict
+   ../target/release/ts-unused-cleaner --all --strict
    ```
 
 ## Configuration
 
-The example includes a `tuf.config.json` file that demonstrates:
+The example includes a `tuc.config.json` file that demonstrates:
 - Custom search directories
 - File exclusion patterns  
 - Detection type toggles
@@ -118,7 +118,7 @@ The example includes a `tuf.config.json` file that demonstrates:
 ## Learning Points
 
 This example showcases:
-- How TS Unused Finder detects different types of unused elements
+- How TS Unused Cleaner detects different types of unused elements
 - Configuration options and their effects
 - Real-world project structure with mixed used/unused code
 - Performance benefits of the Rust implementation

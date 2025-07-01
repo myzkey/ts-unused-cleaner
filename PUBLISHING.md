@@ -1,6 +1,6 @@
-# Publishing TS Unused Finder to NPM
+# Publishing TS Unused Cleaner to NPM
 
-This document outlines the process for publishing the TS Unused Finder package to NPM.
+This document outlines the process for publishing the TS Unused Cleaner package to NPM.
 
 ## Prerequisites
 
@@ -21,11 +21,11 @@ Edit `package.json` and update these fields with your actual GitHub repository:
 {
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_USERNAME/ts-unused-finder.git"
+    "url": "git+https://github.com/YOUR_USERNAME/ts-unused-cleaner.git"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/ts-unused-finder#readme",
+  "homepage": "https://github.com/YOUR_USERNAME/ts-unused-cleaner#readme",
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/ts-unused-finder/issues"
+    "url": "https://github.com/YOUR_USERNAME/ts-unused-cleaner/issues"
   },
   "author": {
     "name": "Your Name",
@@ -59,7 +59,7 @@ npm test
 
 # Test the package locally
 npm pack
-npm install -g ts-unused-finder-1.0.0.tgz
+npm install -g ts-unused-cleaner-1.0.0.tgz
 ```
 
 ## Publishing Process
@@ -91,13 +91,13 @@ npm publish --access public
 After publishing, verify the package:
 ```bash
 # Check package info
-npm info ts-unused-finder
+npm info ts-unused-cleaner
 
 # Install globally to test
-npm install -g ts-unused-finder
+npm install -g ts-unused-cleaner
 
 # Test the CLI
-ts-unused-finder --help
+ts-unused-cleaner --help
 ```
 
 ## Post-Publishing
@@ -120,9 +120,9 @@ ts-unused-finder --help
 
 The published package includes:
 ```
-ts-unused-finder/
+ts-unused-cleaner/
 ├── bin/
-│   └── ts-unused-finder          # Compiled binary
+│   └── ts-unused-cleaner          # Compiled binary
 ├── src/                          # Rust source code
 ├── Cargo.toml                    # Rust configuration
 ├── README.md                     # Documentation
@@ -143,7 +143,7 @@ ts-unused-finder/
 For better cross-platform support, consider:
 1. Building binaries for different platforms (Linux, macOS, Windows)
 2. Using optional dependencies for platform-specific binaries
-3. Creating separate packages like `ts-unused-finder-darwin`, `ts-unused-finder-linux`, etc.
+3. Creating separate packages like `ts-unused-cleaner-darwin`, `ts-unused-cleaner-linux`, etc.
 
 ## Automation
 
@@ -156,6 +156,6 @@ Consider setting up GitHub Actions for automated publishing:
 
 ## Support
 
-- NPM Package: https://www.npmjs.com/package/ts-unused-finder
+- NPM Package: https://www.npmjs.com/package/ts-unused-cleaner
 - GitHub Issues: Update URL with your repository
 - Documentation: Update with your repository URL

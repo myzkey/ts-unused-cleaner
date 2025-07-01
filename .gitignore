@@ -30,11 +30,11 @@ yarn-error.log*
 
 # Binary
 /bin/
-ts-unused-finder
+ts-unused-cleaner
 
 # Test artifacts
 /tests/temp/
 /example/temp/
 
-ts-unused-finder-*.tar.gz
+ts-unused-cleaner-*.tar.gz
 *.tgz

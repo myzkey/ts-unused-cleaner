@@ -31,7 +31,7 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config, DetectorError> {
 
 /// 標準的な設定ファイルを探す
 fn find_config_file() -> Option<String> {
-    let config_file = "tuf.config.json";
+    let config_file = "tuc.config.json";
 
     if Path::new(config_file).exists() {
         Some(config_file.to_string())

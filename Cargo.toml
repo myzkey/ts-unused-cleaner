@@ -1,16 +1,16 @@
 [package]
-name = "ts-unused-finder"
+name = "ts-unused-cleaner"
 version = "0.0.7"
 edition = "2021"
 authors = ["myzkey"]
 description = "A fast Rust-based tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums"
 license = "MIT"
-repository = "https://github.com/myzkey/ts-unused-finder"
+repository = "https://github.com/myzkey/ts-unused-cleaner"
 keywords = ["typescript", "javascript", "react", "unused", "dead-code", "analyzer"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "ts-unused-finder"
+name = "ts-unused-cleaner"
 path = "src/main.rs"
 
 [dependencies]

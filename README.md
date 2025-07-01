@@ -1,6 +1,6 @@
-# TS Unused Finder
+# TS Unused Cleaner
 
-[![Crates.io](https://img.shields.io/crates/v/ts-unused-finder)](https://crates.io/crates/ts-unused-finder)
+[![Crates.io](https://img.shields.io/crates/v/ts-unused-cleaner)](https://crates.io/crates/ts-unused-cleaner)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A blazingly fast tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums in your codebase.
@@ -20,40 +20,40 @@ A blazingly fast tool to detect unused TypeScript/JavaScript code including Reac
 ### From NPM (Recommended)
 
 ```bash
-npm install -g ts-unused-finder
+npm install -g ts-unused-cleaner
 # or
-npx ts-unused-finder
+npx ts-unused-cleaner
 ```
 
 ### From Cargo
 
 ```bash
-cargo install ts-unused-finder
+cargo install ts-unused-cleaner
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/your-username/ts-unused-finder
-cd ts-unused-finder
+git clone https://github.com/your-username/ts-unused-cleaner
+cd ts-unused-cleaner
 cargo build --release
-# Binary will be available at ./target/release/ts-unused-finder
+# Binary will be available at ./target/release/ts-unused-cleaner
 ```
 
 ## Quick Start
 
 ```bash
 # Detect unused React components (default)
-ts-unused-finder
+ts-unused-cleaner
 
 # Detect all element types
-ts-unused-finder --all
+ts-unused-cleaner --all
 
 # Use verbose output
-ts-unused-finder --all --verbose
+ts-unused-cleaner --all --verbose
 
 # Strict mode (exit with error if unused found)
-ts-unused-finder --all --strict
+ts-unused-cleaner --all --strict
 ```
 
 ## Usage
@@ -62,28 +62,28 @@ ts-unused-finder --all --strict
 
 ```bash
 # Basic scan (components only)
-ts-unused-finder
+ts-unused-cleaner
 
 # Scan specific element types
-ts-unused-finder --types --interfaces --functions
+ts-unused-cleaner --types --interfaces --functions
 
 # Scan everything
-ts-unused-finder --all
+ts-unused-cleaner --all
 
 # Verbose output with performance info
-ts-unused-finder --verbose
+ts-unused-cleaner --verbose
 
 # Quiet mode (errors only)
-ts-unused-finder --quiet
+ts-unused-cleaner --quiet
 
 # Custom number of parallel jobs
-ts-unused-finder --jobs 8
+ts-unused-cleaner --jobs 8
 
 # Use custom config file
-ts-unused-finder --config path/to/tuf.config.json
+ts-unused-cleaner --config path/to/tuc.config.json
 
 # Strict mode for CI/CD
-ts-unused-finder --strict
+ts-unused-cleaner --strict
 ```
 
 ### Detection Types
@@ -100,7 +100,7 @@ ts-unused-finder --strict
 
 ## Configuration
 
-Create a `tuf.config.json` file in your project root:
+Create a `tuc.config.json` file in your project root:
 
 ```json
 {
@@ -139,10 +139,10 @@ Create a `tuf.config.json` file in your project root:
 
 ### Configuration Files
 
-TS Unused Finder looks for configuration files in this order:
+TS Unused Cleaner looks for configuration files in this order:
 
 1. Custom config file specified via `--config` flag
-2. `tuf.config.json` in the current directory
+2. `tuc.config.json` in the current directory
 
 If no configuration file is found, the tool will use default settings.
 
@@ -185,10 +185,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Install TS Unused Finder
-      run: npm install -g ts-unused-finder
+    - name: Install TS Unused Cleaner
+      run: npm install -g ts-unused-cleaner
     - name: Check for unused code
-      run: ts-unused-finder --all --strict
+      run: ts-unused-cleaner --all --strict
 ```
 
 ### Exit Codes
@@ -199,7 +199,7 @@ jobs:
 ## Example Output
 
 ```
-🔍 TS Unused Finder - Scanning for unused elements...
+🔍 TS Unused Cleaner - Scanning for unused elements...
 
 📊 Detection Results:
 ┌─────────────┬───────┬──────┬────────┐
@@ -234,7 +234,7 @@ Functions:
 
 ## Performance
 
-TS Unused Finder is designed for speed:
+TS Unused Cleaner is designed for speed:
 
 - **Parallel Processing** - Utilizes all CPU cores via Rayon
 - **Optimized Regex** - Compiled patterns with efficient matching
@@ -250,10 +250,10 @@ Typical performance on large codebases:
 Performance can be tuned using:
 ```bash
 # Use 8 parallel jobs
-ts-unused-finder --jobs 8
+ts-unused-cleaner --jobs 8
 
 # Maximum parallelism (uses all CPU cores)
-ts-unused-finder --jobs $(nproc)
+ts-unused-cleaner --jobs $(nproc)
 ```
 
 ## Supported Patterns
@@ -300,8 +300,8 @@ ts-unused-finder --jobs $(nproc)
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ts-unused-finder
-cd ts-unused-finder
+git clone https://github.com/your-username/ts-unused-cleaner
+cd ts-unused-cleaner
 
 # Build the project
 cargo build

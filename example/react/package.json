@@ -1,8 +1,8 @@
 {
-  "name": "ts-unused-finder-example",
+  "name": "ts-unused-cleaner-example",
   "version": "1.0.0",
   "private": true,
-  "description": "Example React app for demonstrating ts-unused-finder",
+  "description": "Example React app for demonstrating ts-unused-cleaner",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

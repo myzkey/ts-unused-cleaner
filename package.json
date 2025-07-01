@@ -1,14 +1,14 @@
 {
-  "name": "ts-unused-finder",
+  "name": "ts-unused-cleaner",
   "version": "0.0.7",
   "description": "A blazingly fast Rust-based CLI tool to detect unused TypeScript/JavaScript code including React components, types, interfaces, functions, variables, and enums",
-  "main": "bin/ts-unused-finder",
+  "main": "bin/ts-unused-cleaner",
   "bin": {
-    "ts-unused-finder": "./bin/ts-unused-finder",
-    "tuf": "./bin/ts-unused-finder"
+    "ts-unused-cleaner": "./bin/ts-unused-cleaner",
+    "tuc": "./bin/ts-unused-cleaner"
   },
   "scripts": {
-    "build": "cargo build --release && cp target/release/ts-unused-finder bin/",
+    "build": "cargo build --release && cp target/release/ts-unused-cleaner bin/",
     "test": "cargo test",
     "fmt": "cargo fmt",
     "prepare": "npm run build",
@@ -35,13 +35,13 @@
     "email": "myzkey.dev@gmail.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/myzkey/ts-unused-finder#readme",
+  "homepage": "https://github.com/myzkey/ts-unused-cleaner#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/myzkey/ts-unused-finder.git"
+    "url": "git+https://github.com/myzkey/ts-unused-cleaner.git"
   },
   "bugs": {
-    "url": "https://github.com/myzkey/ts-unused-finder/issues"
+    "url": "https://github.com/myzkey/ts-unused-cleaner/issues"
   },
   "files": [
     "bin/",
