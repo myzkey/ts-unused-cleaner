@@ -20,7 +20,6 @@ struct ElementDefinition {
     name: String,
     element_type: ElementType,
     file: String,
-    span: Span,
     should_ignore: bool,
 }
 
@@ -69,7 +68,7 @@ impl UnusedElementDetector {
         // 1. 定義検出用ファイル（除外適用）と使用検出用ファイル（除外なし）を分離
         let definition_files = self.get_source_files_for_definitions()?;
         let all_files = self.get_all_source_files()?;
-        println!("📁 Found {} source files ({} for definitions, {} for usage scanning)", 
+        println!("📁 Found {} source files ({} for definitions, {} for usage scanning)",
                  all_files.len(), definition_files.len(), all_files.len());
 
         // 2. AST解析で要素定義を抽出（除外パターン適用）
@@ -401,7 +400,6 @@ impl DefinitionVisitor {
                             name,
                             element_type: ElementType::Function,
                             file: self.file.clone(),
-                            span: func_decl.span(),
                             should_ignore,
                         });
                     }
@@ -420,7 +418,6 @@ impl DefinitionVisitor {
                                     name: name.clone(),
                                     element_type: ElementType::Component,
                                     file: self.file.clone(),
-                                    span: decl.span,
                                     should_ignore,
                                 });
                             }
@@ -430,7 +427,6 @@ impl DefinitionVisitor {
                                     name: name.clone(),
                                     element_type: ElementType::Function,
                                     file: self.file.clone(),
-                                    span: decl.span,
                                     should_ignore,
                                 });
                             }
@@ -440,7 +436,6 @@ impl DefinitionVisitor {
                                     name: name.clone(),
                                     element_type: ElementType::Variable,
                                     file: self.file.clone(),
-                                    span: decl.span,
                                     should_ignore,
                                 });
                             }
@@ -456,7 +451,6 @@ impl DefinitionVisitor {
                         name,
                         element_type: ElementType::Type,
                         file: self.file.clone(),
-                        span: type_alias.span(),
                         should_ignore,
                     });
                 }
@@ -469,7 +463,6 @@ impl DefinitionVisitor {
                         name,
                         element_type: ElementType::Interface,
                         file: self.file.clone(),
-                        span: interface.span(),
                         should_ignore,
                     });
                 }
@@ -482,7 +475,6 @@ impl DefinitionVisitor {
                         name,
                         element_type: ElementType::Enum,
                         file: self.file.clone(),
-                        span: enum_decl.span(),
                         should_ignore,
                     });
                 }
@@ -502,7 +494,6 @@ impl DefinitionVisitor {
                             name,
                             element_type: ElementType::Component,
                             file: self.file.clone(),
-                            span: export_default.span(),
                             should_ignore,
                         });
                     }
@@ -839,7 +830,7 @@ mod tests {
     #[test]
     fn test_ignore_comment_detection() {
         let config = create_test_config();
-        
+
         // Test TypeScript type with ignore comment
         let content = r#"// @ts-unused-ignore
 export type UnusedType = string;
@@ -847,11 +838,11 @@ export type UnusedType = string;
 export type UsedType = number;
 "#;
         let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
-        
+
         // Find UnusedType and UsedType
         let unused_type = result.iter().find(|def| def.name == "UnusedType").unwrap();
         let used_type = result.iter().find(|def| def.name == "UsedType").unwrap();
-        
+
         assert!(unused_type.should_ignore, "UnusedType should be marked for ignore");
         assert!(!used_type.should_ignore, "UsedType should not be marked for ignore");
     }
@@ -859,7 +850,7 @@ export type UsedType = number;
     #[test]
     fn test_ignore_comment_interface() {
         let config = create_test_config();
-        
+
         let content = r#"// @ts-unused-ignore
 export interface UnusedInterface {
     prop: string;
@@ -870,10 +861,10 @@ export interface UsedInterface {
 }
 "#;
         let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
-        
+
         let unused_interface = result.iter().find(|def| def.name == "UnusedInterface").unwrap();
         let used_interface = result.iter().find(|def| def.name == "UsedInterface").unwrap();
-        
+
         assert!(unused_interface.should_ignore);
         assert!(!used_interface.should_ignore);
     }
@@ -881,7 +872,7 @@ export interface UsedInterface {
     #[test]
     fn test_ignore_comment_function() {
         let config = create_test_config();
-        
+
         let content = r#"// @ts-unused-ignore
 export function unusedFunction() {
     return "hello";
@@ -892,10 +883,10 @@ export function usedFunction() {
 }
 "#;
         let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
-        
+
         let unused_function = result.iter().find(|def| def.name == "unusedFunction").unwrap();
         let used_function = result.iter().find(|def| def.name == "usedFunction").unwrap();
-        
+
         assert!(unused_function.should_ignore);
         assert!(!used_function.should_ignore);
     }
@@ -903,7 +894,7 @@ export function usedFunction() {
     #[test]
     fn test_ignore_comment_component() {
         let config = create_test_config();
-        
+
         let content = r#"// @ts-unused-ignore
 export const UnusedComponent = () => {
     return <div>Unused</div>;
@@ -914,10 +905,10 @@ export const UsedComponent = () => {
 };
 "#;
         let result = parse_file_for_definitions_static("test.tsx", content, &config).unwrap();
-        
+
         let unused_component = result.iter().find(|def| def.name == "UnusedComponent").unwrap();
         let used_component = result.iter().find(|def| def.name == "UsedComponent").unwrap();
-        
+
         assert!(unused_component.should_ignore);
         assert!(!used_component.should_ignore);
     }
@@ -925,7 +916,7 @@ export const UsedComponent = () => {
     #[test]
     fn test_ignore_comment_enum() {
         let config = create_test_config();
-        
+
         let content = r#"// @ts-unused-ignore
 export enum UnusedEnum {
     VALUE1 = "value1",
@@ -938,10 +929,10 @@ export enum UsedEnum {
 }
 "#;
         let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
-        
+
         let unused_enum = result.iter().find(|def| def.name == "UnusedEnum").unwrap();
         let used_enum = result.iter().find(|def| def.name == "UsedEnum").unwrap();
-        
+
         assert!(unused_enum.should_ignore);
         assert!(!used_enum.should_ignore);
     }
@@ -949,15 +940,15 @@ export enum UsedEnum {
     #[test]
     fn test_inline_ignore_comment() {
         let config = create_test_config();
-        
+
         let content = r#"export type UnusedType = string; // @ts-unused-ignore
 export type UsedType = number;
 "#;
         let result = parse_file_for_definitions_static("test.ts", content, &config).unwrap();
-        
+
         let unused_type = result.iter().find(|def| def.name == "UnusedType").unwrap();
         let used_type = result.iter().find(|def| def.name == "UsedType").unwrap();
-        
+
         assert!(unused_type.should_ignore, "UnusedType should be marked for ignore with inline comment");
         assert!(!used_type.should_ignore, "UsedType should not be marked for ignore");
     }
